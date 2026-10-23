@@ -1,0 +1,55 @@
+/* Every's look on the real board: black, off-white, the light-blue accent, a serif for headings. Layout is the board's own. */
+:root, :root:not([data-theme]) {
+  color-scheme: dark;
+  --page: #020202; --surface: #0c0c0b; --wash: rgba(253,250,247,.07);
+  --ink: #fdfaf7; --ink2: rgba(253,250,247,.68); --muted: rgba(253,250,247,.42);
+  --grid: #222220; --axis: #3a3a37; --border: rgba(253,250,247,.13);
+  --series: #c0f0fb; --series-wash: rgba(192,240,251,.13);
+  --good: #8be39a; --good-wash: rgba(139,227,154,.14);
+  --critical: #ff8574; --critical-wash: rgba(255,133,116,.15);
+  --mono: Menlo, "SF Mono", ui-monospace, monospace; /* has the block characters at the same width */
+  --serif: "Newsreader", "Hoefler Text", Georgia, serif;
+}
+body { font-family: "Inter", system-ui, sans-serif; background: var(--page); }
+header { background: var(--page); }
+header .brand { display: flex; align-items: center; gap: 12px; font: 400 22px/1 var(--serif); white-space: nowrap; }
+header .brand img { height: 16px; display: block; }
+header .brand .rule { width: 1px; height: 20px; background: var(--border); }
+header .brand em { font-style: italic; }
+header h1 { font: 400 20px/1.3 var(--serif); color: var(--ink2); }
+#replayclock { font: 12px/1 "Geist Mono", ui-monospace, monospace; color: var(--ink2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+#replayclock b { color: var(--ink); font-weight: 500; }
+.col-head h2 { font: 400 22px/1.2 var(--serif); letter-spacing: 0; }
+.row .prompt { font-family: var(--serif); font-weight: 400; font-size: 15.5px; }
+pre.art { background: var(--surface); }
+main > .col { transition: none; }
+
+/* the replay's hands: a button being pressed looks pressed */
+button.pressed { background: var(--series) !important; color: var(--page) !important; border-color: var(--series) !important; }
+button.pressed kbd { color: inherit; border-color: currentColor; }
+
+/* the subtitle bar under the board, as in a film */
+body { height: calc(100dvh - 84px); }
+#subtitle { position: fixed; left: 0; right: 0; bottom: 0; height: 84px; z-index: 5; display: flex; align-items: center; justify-content: center; padding: 0 40px; border-top: 1px solid var(--border); background: var(--page); }
+#subtitle .t { font: 400 22px/1.3 var(--serif); color: var(--ink); max-width: 1180px; text-align: center; }
+
+/* intro and outro */
+.card { position: fixed; inset: 0; z-index: 10; background: var(--page); display: flex; flex-direction: column; justify-content: center; padding: 0 120px; gap: 22px; opacity: 0; pointer-events: none; }
+.card img { height: 30px; align-self: flex-start; }
+.card h1 { margin: 0; font: 400 92px/1 var(--serif); letter-spacing: -.02em; }
+.card h1 em { font-style: italic; }
+.card p { margin: 0; font: 400 26px/1.4 var(--serif); color: var(--ink2); max-width: 1000px; }
+.card p.small { font-size: 16px; color: var(--muted); }
+.card p b { color: var(--series); font-weight: 400; font-style: italic; }
+#outro { padding: 44px 80px; justify-content: flex-start; gap: 14px; }
+#outro h1 { font-size: 52px; }
+#outro p { font-size: 19px; max-width: none; }
+.eyebrow { font: 500 10px/1 "Geist Mono", ui-monospace, monospace; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+.pairs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; flex: 1; min-height: 0; }
+.pair { display: grid; grid-template-rows: auto 1fr 1fr; gap: 8px; min-height: 0; }
+.pair .p { font: 400 19px/1 var(--serif); }
+.pair .box { border: 1px solid var(--border); border-radius: 8px; background: var(--surface); position: relative; display: grid; place-items: center; overflow: hidden; min-height: 0; }
+.pair .box.after { border-color: rgba(192,240,251,.45); }
+.pair .box .v { position: absolute; left: 8px; top: 7px; font: 10px/1.3 "Geist Mono", ui-monospace, monospace; color: var(--ink2); }
+.pair .box.after .v { color: var(--series); }
+.pair pre { font-family: var(--mono); line-height: 1.1; white-space: pre; margin: 0; }

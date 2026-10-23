@@ -1,0 +1,77 @@
+{
+  "voice": "Charon",
+  "style": "A sharp, warm product explainer for a business audience. Brisk and confident, clear diction, like a good documentary narrator who respects your time. Not salesy. Keep pauses short.",
+  "music": "Minimal, warm instrumental underscore for a product explainer film. Soft pulsing synths, gentle felt piano, light clean percussion, about 92 BPM, steady and quietly optimistic, building slightly toward the end. No vocals. About two minutes.",
+  "lines": [
+    {
+      "id": "intro",
+      "at": "intro",
+      "text": "Every team using AI hits the same wall: it doesn't know how you like things done. Here's how everyday corrections become a skill that gets it right the first time."
+    },
+    {
+      "id": "desk",
+      "at": "firstCase",
+      "text": "A skill is saved instructions for one job. This one draws ASCII art. Every time someone uses it in Claude Code, the use lands on the Desk."
+    },
+    {
+      "id": "steer",
+      "at": "firstSteer",
+      "text": "It draws thin outlines. This person wants solid, shaded drawings that stand on a shadow, so they say so, in plain words."
+    },
+    {
+      "id": "checks",
+      "at": "steerRead",
+      "text": "Each correction becomes a yes-or-no check. Is the body filled in? Is there a shadow?"
+    },
+    {
+      "id": "accept",
+      "at": "firstAccept",
+      "text": "When it's right, they accept it into the Lab. That's the benchmark: built from real work, not made-up tests."
+    },
+    {
+      "id": "dismiss",
+      "at": "firstDismiss",
+      "text": "A use that isn't worth learning from gets dismissed."
+    },
+    {
+      "id": "optimize",
+      "at": "optimize1",
+      "text": "Then, Optimize. A teacher model reads what the skill gets wrong, and writes a new version."
+    },
+    {
+      "id": "test",
+      "at": "testing1",
+      "text": "Every version is run on every case, first try, with no one steering, and graded on the checks."
+    },
+    {
+      "id": "won",
+      "at": "won1",
+      "text": "A version only replaces the skill if it passes more checks. Two does, barely. Then three. Then four: from sixteen of thirty-one, to twenty-six."
+    },
+    {
+      "id": "lost",
+      "at": "lost1",
+      "text": "Most versions lose, and never ship. That's why skills need tests: so a worse version can't quietly replace a better one."
+    },
+    {
+      "id": "back",
+      "at": "phase2",
+      "text": "Back to work. Now the drawings come out right the first time. Nothing left to correct."
+    },
+    {
+      "id": "bar",
+      "at": "optimize2",
+      "text": "Every new case raises the bar: fifty checks, across ten cases."
+    },
+    {
+      "id": "last",
+      "at": "lastWon",
+      "text": "Version eleven gets forty-six of the fifty. Of thirteen versions, five won and eight lost."
+    },
+    {
+      "id": "outro",
+      "at": "outro",
+      "text": "Corrections per drawing: from two, to zero. Steering is the data. Checks are the benchmark. Testing is the guardrail."
+    }
+  ]
+}
