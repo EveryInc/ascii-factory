@@ -1,7 +1,7 @@
 {
   "name": "ascii-factory",
   "private": true,
-  "description": "A board that improves a Claude Code skill from how it is used, and a narrated replay of it at work. Run the board with node loop/v2/server.mjs: nothing to install. A host needs the Anthropic SDK, below.",
+  "description": "A board that improves a Claude Code skill from how it is used. Run the board with node loop/v2/server.mjs: nothing to install. A host needs the Anthropic SDK, below.",
   "license": "MIT",
   "scripts": {
     "start": "node loop/v2/server.mjs"
