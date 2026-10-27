@@ -4,7 +4,8 @@
   "description": "A board that improves a Claude Code skill from how it is used. Run the board with node loop/v2/server.mjs: nothing to install. A host needs the Anthropic SDK, below.",
   "license": "MIT",
   "scripts": {
-    "start": "node loop/v2/server.mjs"
+    "start": "node loop/v2/server.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "0.131.0"

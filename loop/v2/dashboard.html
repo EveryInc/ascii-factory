@@ -69,6 +69,9 @@
   button:disabled { opacity: .45; cursor: default; }
   button.icon { border: 0; background: none; padding: 0 6px; color: var(--muted); line-height: 1.3; font-size: 15px; }
   button.icon:hover { color: var(--ink); }
+  .split { margin: 0 0 8px; font-size: 12px; color: var(--muted); }
+  .split button.icon { font-size: 12px; text-decoration: underline; }
+  .split button.icon:disabled { text-decoration: none; }
   button:focus-visible, .field:focus-within { outline: 2px solid var(--series); outline-offset: 1px; }
   kbd { font: 11px/1.5 var(--mono); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; color: var(--ink2); }
 
@@ -441,7 +444,30 @@ function deskParts(c) {
       <button class="q" data-edit-check="${k.id}" title="Click to reword">${esc(k.question)}</button>
       <button class="icon quiet" data-del-check="${k.id}" title="Remove this check" aria-label="Remove this check">×</button></li>`).join('')
   const more = c.writing ? `<li class="pending">writing checks</li>` : !c.checks?.length ? `<li class="hint">No checks, so nothing to grade it on.</li>` : ''
-  return [`<div class="answer">${art(latest(c).answer)}</div>`, saidHTML(c, noting !== c.id), `<ol class="checks">${checks}${more}</ol>`]
+  return [`${splitHTML(c)}<div class="answer">${art(latest(c).answer)}</div>`, saidHTML(c, noting !== c.id), `<ol class="checks">${checks}${more}</ol>`]
+}
+
+// A follow-up that asked for a different task became a case of its own: say so on both, and let the new one be undone.
+// A case can be both, split from one and split again into another.
+function splitHTML(c) {
+  const from = c.splitFrom && caseById(c.splitFrom)
+  const into = c.splitInto && caseById(c.splitInto)
+  const lines = []
+  if (from) lines.push(`Split from <b>${esc(asked(from))}</b>: a follow-up asked for a different task.${undoHTML(c, from, into)}`)
+  if (into) lines.push(`Continues as <b>${esc(asked(into))}</b>: a follow-up asked for a different task.`)
+  return lines.map((l) => `<p class="split">${l}</p>`).join('')
+}
+
+// Undo, or why it cannot be done yet: a split is undone only while both cases are on the desk, and after any later
+// split of this case has been undone (rejoin, in the server).
+function undoHTML(c, from, into) {
+  const why =
+    from.status !== 'queue' ? `${asked(from)} is in the dataset`
+    : into?.status === 'queue' ? `undo the split into ${asked(into)} first`
+    : into ? `${asked(into)}, split from this, is in the dataset`
+    : ''
+  if (why) return ` <button class="icon" disabled title="Undo is not available: ${esc(why)}">Undo</button> <span class="why">${esc(why)}</span>`
+  return ` <button class="icon" data-rejoin="${c.id}" title="Put this back into ${esc(asked(from))}, as steering">Undo</button>`
 }
 
 function renderDesk() {
@@ -490,6 +516,16 @@ function finishNotes(save) {
   }
   if (document.activeElement === $('notes')) $('notes').blur()
   render()
+}
+
+// Undo a split. Notes still open on the case are saved first, and waited for: once it is undone the case is gone.
+async function rejoin(id) {
+  if (noting === id) {
+    const text = $('notes').value
+    finishNotes(false)
+    if (text.trim() !== (caseById(id)?.notes ?? '').trim()) await tool('write_notes', { case_id: id, text })
+  }
+  await tool('rejoin_case', { case_id: id })
 }
 
 // Reword a desk check in place: Enter saves, Escape or leaving the box puts it back.
@@ -894,6 +930,7 @@ document.addEventListener('click', (e) => {
   } else if ('act' in d) act(d.act)
   else if ('editCheck' in d) editCheck(b)
   else if ('delCheck' in d) tool('delete_check', { check_id: d.delCheck }).catch(console.warn)
+  else if ('rejoin' in d) rejoin(d.rejoin).catch(console.warn)
   else if ('view' in d) {
     // A second click on the open version folds it, and the lab goes on showing it; the chart only ever opens one.
     const id = Number(d.view)

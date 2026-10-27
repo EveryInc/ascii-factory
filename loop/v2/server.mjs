@@ -255,10 +255,13 @@ You are given the skill, the request, the answer it got in the session, what the
 - YES must mean the answer is the way they want it. One thing per check, at most 20 words.
 - Change a check only when something the person said calls for it. Keep every other check word for word, with its id.
 - A message in the session that is about the answer but asks for no change ("thanks", "looks good", a question about it) changes nothing, and the reply to it is not a new answer: put its id in "comments".
-- A message in the session may not be about this answer at all: other work, or a new topic. Put its id in "unrelated", and take nothing from it or from anything after it.
+- A message in the session may not be about this answer at all: other work, or something the skill is not for. Put its id in "unrelated", and take nothing from it or from anything after it.
+- A message may ask the skill for a different task instead of changing this one: a request of the same kind, that this skill is for (see its description). Ask: would an answer that does what the message asks still be a correct answer to the request? If not, it is a new task: put it in "new_task", and take nothing from it or from anything after it. On a request for a boat, "make it a car" or "now a tree" is a new task; "add a sail", "make it longer" or "make it a sailboat" is not. Only the first new task counts.
+- A message that asks for something this skill is not for (other work, another tool) is unrelated, not a new task.
+- The new task's request is what the skill would now be asked, in the form of the request above, with only what changes the task: "a car", not "a small red car". Leave out any preferences said with it.
 
 Reply with JSON only:
-{"checks": [{"id": "<the id of a check it has now, or null>", "question": "..."}], "comments": ["<id of a message>"], "unrelated": ["<id of a message>"]}`
+{"checks": [{"id": "<the id of a check it has now, or null>", "question": "..."}], "comments": ["<id of a message>"], "unrelated": ["<id of a message>"], "new_task": {"id": "<id of a message>", "request": "..."} or null}`
 
 const GENERATE_SYSTEM = `You write a Claude Code skill: the instructions in its SKILL.md, from cases of how one person wants it to work.
 Each case is a request the skill was used for, with yes/no checks written from what the person said about the answers they got, and their notes.
@@ -348,13 +351,20 @@ const freshBoard = (name, file) => ({
   //   turns:     [{ id, ask, answer, comment }]  the use, then each follow-up in the session while it is about this answer.
   //              comment: it asked for no change ("thanks"), so its reply is not a new answer
   //   following: later turns of the session are still taken as steering. Off once the session moves on, or it is accepted
+  //   movedOn:   the session moved on from it (an unrelated message, or a split), as opposed to it being accepted
   //   steering:  [{ id, text, turn, read }]  what was said in the session after the use, read once worked into the checks
   //   notes:     what the person thinks of it, spoken or typed on the desk. notesRead: the notes the checks were last written from
   //   checks:    [{ id, question }], or null until the first ones are written
   //   verdicts:  { [grader]: { [checkId]: { pass, why } } }  for the latest answer in the session
   //   model:     the model the session used
+  //   splitInto: the case a follow-up that asked for a different task became; splitFrom: the case it was split from.
+  //              A split case starts with the answer the follow-up reacted to (a turn marked context), and that
+  //              follow-up (marked opens) is its first steer. A steer marked keep was put back by undo: never a new task.
   cases: [],
   dismissed: [], // keys of dismissed cases, so a later turn in their session does not bring them back
+  // Follow-ups that started a case of their own: { session, turn, request }. The turns after one follow it, as they
+  // follow a use of the skill, and they stay split after the new case is dismissed.
+  splits: [],
   // The library, every version of the skill's body: { id, text, note, by, status, parent, trial, at }
   //   by:      'start' | 'hand' (SKILL.md edited by hand) | 'board' | 'agent' | 'optimizer' | 'generate'
   //   teacher: the teacher that wrote it, or null for yours (the start, edits by hand, an agent's)
@@ -378,6 +388,7 @@ function revive(s) {
   s.loop = freshBoard().loop
   s.stopped ??= null
   s.baseline ??= freshBoard().baseline
+  s.splits ??= []
   // First tries and verdicts were kept for one student and one grader, both Haiku at low effort.
   const old = 'haiku · low'
   if (Object.values(s.runs).some((byCase) => Object.values(byCase).some((r) => r && 'output' in r))) {
@@ -524,7 +535,8 @@ Reply with JSON only, one entry per check id:
   async function askForChecks(c, unread, notes) {
     const last = latest(c)
     const said = c.steering.map((s) => {
-      const head = `${s.id}${unread.includes(s) ? ' (new)' : ''}: ${s.text}`
+      const not = s.opens ? ' (this asked for the request above: not a new task)' : s.keep ? ' (the person kept this on the request above: not a new task)' : ''
+      const head = `${s.id}${unread.includes(s) ? ' (new)' : ''}${not}: ${s.text}`
       const turn = s.turn !== last.id ? c.turns.find((t) => t.id === s.turn) : null
       return turn ? `${head}\nTHE REPLY IT GOT:\n<<<\n${clip(turn.answer, 1500)}\n>>>` : head
     })
@@ -559,7 +571,8 @@ ${c.checks?.map((k) => `${k.id}: ${k.question}`).join('\n') || '(none yet)'}`,
       .filter((x) => x.question)
       .slice(0, 8)
     const ids = (x) => (Array.isArray(x) ? x.map(String) : [])
-    return { checks, comments: ids(json.comments), unrelated: ids(json.unrelated) }
+    const task = json.new_task && typeof json.new_task === 'object' ? { id: String(json.new_task.id ?? ''), request: String(json.new_task.request ?? '') } : null
+    return { checks, comments: ids(json.comments), unrelated: ids(json.unrelated), newTask: task }
   }
 
   // A new version, written from what the current one fails, and from the checks it has not been tried on yet.
@@ -925,8 +938,9 @@ ${cases.join('\n\n')}`,
       if (stale()) return
       if (!got) break
       for (const s of unread) s.read = true
+      const notesRead = c.notesRead
       c.notesRead = notes
-      leaveOut(c, got.unrelated)
+      // Comments first, so that a "thanks" just before a new task is not taken for the answer it reacted to.
       for (const s of unread) {
         const t = got.comments.includes(s.id) && c.turns.find((x) => x.id === s.turn)
         if (t && !t.comment) {
@@ -934,6 +948,17 @@ ${cases.join('\n\n')}`,
           c.verdicts = {} // the answer to grade is an earlier one again
         }
       }
+      // A follow-up that asked for a different task becomes a case of its own. This reply's checks were written with
+      // it in view, so they are not kept: the case goes round again on what is left, its steering unread once more.
+      const task = newTaskIn(c, got)
+      if (task) {
+        splitOff(c, task.steer, task.request)
+        for (const s of unread) if (c.steering.includes(s)) s.read = false
+        c.notesRead = notesRead
+        c.again = true
+        continue
+      }
+      leaveOut(c, got.unrelated)
       setChecks(c, got.checks)
     } while (c.again && !stale())
     c.writing = false
@@ -952,8 +977,94 @@ ${cases.join('\n\n')}`,
     c.dropped.push(...gone)
     c.steering = c.steering.filter((s) => !gone.includes(s.turn))
     c.following = false
+    c.movedOn = true
     c.verdicts = {}
     log(`the session moved on from "${clip(c.ask, 40)}": left out "${clip(first.text, 60)}"`, 'usage')
+  }
+
+  // The steer the check writer called a new task, if it can be one: a steer of this case, not the one that opened it or
+  // one the person kept on it, after the first answer, and before any message that was unrelated.
+  function newTaskIn(c, got) {
+    const steer = got.newTask && c.steering.find((s) => s.id === got.newTask.id && !s.opens && !s.keep)
+    const request = got.newTask?.request.trim().replace(/^\/\S+\s+/, '') // "/ascii a dog" or "a dog": stored as "a dog"
+    if (!steer || !request) return null
+    const at = (s) => c.turns.findIndex((t) => t.id === s.turn)
+    if (at(steer) < 1) return null
+    if (c.steering.some((s) => got.unrelated.includes(s.id) && at(s) >= 0 && at(s) < at(steer))) return null
+    return { steer, request }
+  }
+
+  // Split a case where a follow-up asked for a different task. The case keeps what came before; the follow-up and the
+  // turns after it become a new case, which asks for the new request and starts from the answer the follow-up reacted to.
+  function splitOff(c, steer, request) {
+    const cut = c.turns.findIndex((t) => t.id === steer.turn)
+    const key = `${c.session}:${steer.turn}`
+    const moved = c.turns.slice(cut)
+    const reactedTo = c.turns.slice(0, cut).findLast((t) => !t.comment)
+    // Where the session had already been left out (it moved on), it stays left out for the new case too. Accepting the
+    // case also stops it following, but that is no reason for the new case, still on the desk, to stop. (A case saved
+    // before movedOn was kept: on the desk and not following means the session moved on.)
+    const following = !(c.movedOn ?? (c.status === 'queue' && !c.following))
+    const dropped = [...c.dropped]
+    c.turns = c.turns.slice(0, cut)
+    c.dropped.push(...moved.map((t) => t.id))
+    const steers = c.steering.filter((s) => moved.some((t) => t.id === s.turn))
+    c.steering = c.steering.filter((s) => !steers.includes(s))
+    c.following = false
+    c.movedOn = true // the turns after the split are the new case's
+    c.verdicts = {}
+    state.splits.push({ session: c.session, turn: steer.turn, request })
+    if (state.dismissed.includes(key) || state.cases.some((x) => x.key === key)) return
+    const n = {
+      id: `c${++state.seq.c}`,
+      key,
+      session: c.session,
+      ask: `/${state.skill.name} ${request}`,
+      prompt: request,
+      status: 'queue',
+      at: Date.now(),
+      model: c.model,
+      turns: [{ ...reactedTo, context: true }, ...moved],
+      following,
+      dropped: [...dropped],
+      steering: steers.map((s) => ({ ...s, read: false, ...(s === steer ? { opens: true } : {}) })),
+      notes: '',
+      notesRead: '',
+      checks: null,
+      writing: false,
+      verdicts: {},
+      splitFrom: c.id,
+    }
+    c.splitInto = n.id
+    state.cases.push(n)
+    log(`"${clip(steer.text, 60)}" asked for a different task: split "${clip(c.ask, 40)}" into "${clip(n.ask, 40)}"`, 'usage')
+    refreshChecks(n)
+  }
+
+  // Undo a split: the follow-up and the turns after it go back to the case they came from, as steering, and that
+  // follow-up is never taken for a new task again. Only while both cases are on the desk.
+  function rejoin(n) {
+    const c = state.cases.find((x) => x.id === n.splitFrom)
+    if (!c) throw new Error(`${n.id} was not split from a case on this board`)
+    if (n.status !== 'queue' || c.status !== 'queue') throw new Error('a split is undone only while both cases are on the desk: one is in the dataset')
+    const later = n.splitInto && state.cases.find((x) => x.id === n.splitInto)
+    if (later) throw new Error(`${n.id} was split again, into "${clip(later.ask, 40)}": undo that later split first`)
+    const moved = n.turns.filter((t) => !t.context)
+    c.turns.push(...moved)
+    // The case takes over where the new one had got to: the turns it left out stay out, and if the session had moved
+    // on from it, the case does not follow the session either.
+    c.dropped = [...c.dropped.filter((id) => !moved.some((t) => t.id === id)), ...n.dropped.filter((id) => !c.dropped.includes(id))]
+    c.steering.push(...n.steering.map(({ opens, ...s }) => ({ ...s, read: false, ...(opens ? { keep: true } : {}) })))
+    if (n.notes.trim()) c.notes = [c.notes.trim(), n.notes.trim()].filter(Boolean).join('\n') // checks are written again from them
+    c.following = n.following
+    c.movedOn = Boolean(n.movedOn)
+    c.verdicts = {}
+    delete c.splitInto
+    state.splits = state.splits.filter((x) => !(x.session === n.session && x.turn === moved[0]?.id))
+    state.cases = state.cases.filter((x) => x !== n)
+    for (const byVersion of Object.values(state.runs)) for (const byCase of Object.values(byVersion)) delete byCase[n.id]
+    log(`split undone: "${clip(n.ask, 40)}" is back in "${clip(c.ask, 40)}"`, 'outer')
+    refreshChecks(c)
   }
 
   // A check that keeps its wording keeps its id, and with it the verdicts it already has.
@@ -1030,6 +1141,7 @@ ${cases.join('\n\n')}`,
     if (state.dismissed.includes(caseKey) || !t.answer) return
     let c = state.cases.find((x) => x.key === caseKey)
     let changed = false
+    if (!c && use.split) return // a split case is made by splitOff, with its request; this only follows it
     if (!c) {
       c = { id: `c${++state.seq.c}`, key: caseKey, session: sid, ask: clip(t.ask, 500), prompt: use.args || clip(t.ask, 500), status: 'queue', at: Date.now(), model: t.model ?? null }
       Object.assign(c, { turns: [{ id: t.id, ask: c.ask, answer: t.answer }], following: true, dropped: [], steering: [], notes: '', notesRead: '', checks: null, writing: false, verdicts: {} })
@@ -1085,6 +1197,8 @@ ${cases.join('\n\n')}`,
       id: c.id,
       request: c.ask,
       said_in_session: c.steering.map((s) => s.text),
+      ...(c.splitFrom ? { split_from: c.splitFrom } : {}),
+      ...(c.splitInto ? { split_into: c.splitInto } : {}),
       notes: c.notes,
       checks: (c.checks ?? []).map((k) => ({ id: k.id, question: k.question, pass: verdicts[k.id]?.pass ?? null, why: verdicts[k.id]?.why ?? null })),
       ...(desk
@@ -1109,6 +1223,7 @@ ${cases.join('\n\n')}`,
     versionOut,
     accept,
     dismiss,
+    rejoin,
     setNotes,
     editCheck,
     deleteCheck,
@@ -1274,15 +1389,27 @@ function onCatch(h) {
   const reply = String(h.last_assistant_message ?? '').trim()
   if (reply && turns.length) turns.at(-1).answer = reply
 
+  // The turns a case follows: those after it, up to the next use of a skill or a follow-up that split off a new task.
+  const following = (i, b) => {
+    const splits = new Set(b.state.splits.filter((x) => x.session === sid).map((x) => x.turn))
+    const rest = turns.slice(i + 1)
+    const end = rest.findIndex((x) => x.uses.length || splits.has(x.id))
+    return end < 0 ? rest : rest.slice(0, end)
+  }
   turns.forEach((t, i) => {
     for (const use of t.uses) {
       const file = skillFileOf(use, cwd)
       if (!file || !connectedFile(file)) continue
-      const rest = turns.slice(i + 1)
-      const end = rest.findIndex((x) => x.uses.length)
-      boardFor(file, use.skill).upsert(sid, t, use, end < 0 ? rest : rest.slice(0, end))
+      const b = boardFor(file, use.skill)
+      b.upsert(sid, t, use, following(i, b))
     }
   })
+  // A follow-up that asked for a different task started a case of its own, and the turns after it follow that case.
+  for (const b of boards.values())
+    for (const x of b.state.splits) {
+      const i = x.session === sid ? turns.findIndex((t) => t.id === x.turn) : -1
+      if (i >= 0) b.upsert(sid, turns[i], { args: x.request, split: true }, following(i, b))
+    }
 }
 
 // ---------- tools: everything the board does, for an agent too ----------
@@ -1389,6 +1516,15 @@ const TOOLS = [
       if (decision === 'accept') B().accept(c)
       else if (decision === 'dismiss') B().dismiss(c)
       else throw new Error('decision is accept or dismiss')
+      return { ok: true }
+    },
+  },
+  {
+    name: 'rejoin_case',
+    description: 'Undo a split. A follow-up in the session that asked for a different task became a case of its own (split_from says which case it came from); this puts it and the turns after it back into that case, as steering. Only while both cases are on the desk.',
+    input: { case_id: str('a case that was split off (it has split_from)') },
+    run: ({ case_id }) => {
+      B().rejoin(need(B().state.cases.find((x) => x.id === case_id), 'case'))
       return { ok: true }
     },
   },
